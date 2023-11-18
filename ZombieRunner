@@ -1,0 +1,553 @@
+#include <stdio.h>
+#include <Windows.h>
+#include <conio.h>
+#include <stdlib.h>
+#include <time.h>
+
+/*
+* 10으로 나눈 (장애물 유형 등이 10개 이상으로 늘어날 경우 100의 자리로 바꾼다)
+몫         /     나머지
+
+좀비인지        좀비 id
+pc인지           pc id
+장애물인지     장애물 id
+
+몫 : 좀비인지, pc인지, 장애물인지, 아이템인지를 구별
+나머지 : 몇번째 좀비모습인지, 몇번째 pc모습인지, 몇번째 장애물인지, 몇번째 아이템인지를 구별
+
+장애물 : 1
+PC : 7
+
+※이 경우 PC모델이나 좀비모델이 char로 구현이 가능함에도 string으로 바꿔야됨
+좀비는 왼쪽으로 움직이니 몫/나머지로 구현해야되지만 PC는 굳이 구현 안해도 될꺼같기도함
+*/
+
+//기본
+char pcModel[][3][5] = {
+{
+	{'(','0','_','0',')'},
+	{'/','|','_','|','~'},
+	{' ','/',' ','|',' '}},
+
+{
+   {'(','O','_','O',')'},
+   {'/','|','_','|','~'},
+   {' ','*',' ','*',' '}},
+
+{
+   {' ',' ',' ',' ',' '},
+   {'(','0','_','0',')'},
+   {'/','|','_','|','~'}},
+
+{
+   {'(','>','_','<',')'},
+   {'/','|','_','|','~'},
+   {' ','^',' ','^',' '}},
+
+{
+   {'(','`','^','`',')'},
+   {'|','\\','_','|','\\'},
+   {' ','/',' ','|',' '}},
+};
+
+
+char obsModel[][7][4][3] = {
+	/* First OBS
+		 
+
+		 ▲▲
+		 ■■     */
+	{
+		{"10", " ", " ", " "},
+		{" ", " ", " ", " "},
+		{" ", " ", " ", " "},
+		{" ", " ", " ", " "},
+		{" ", " ", " ", " "},
+		{"▲\0", "▲\0", " ", " "},
+		{"■\0", "■\0", " ", " "} },
+	/* Second OBS
+	     ▲▲
+		 ■■
+		 ■■
+		 ■■     */
+	
+	{
+		{"11", " ", " ", " "},
+		{" ", " ", " ", " "},
+		{" ", " ", " ", " "},
+		{"▲\0", "▲\0", " ", " "},
+		{"■\0", "■\0", " ", " "},
+		{"■\0", "■\0", " ", " "},
+		{"■\0", "■\0", " ", " "} },
+	/* Third OBS
+	   ■■■■
+	   ■■■■
+	   ■■■■
+	   ▼▼▼▼
+			    */
+	{
+		{"12", " ", " ", " "},
+		{"■\0", "■\0", "■\0", "■\0"},
+		{"■\0", "■\0", "■\0", "■\0"},
+		{"■\0", "■\0", "■\0", "■\0"},
+		{"▼\0", "▼\0", "▼\0", "▼\0"}, 
+		{" ", " ", " ", " "},
+		{" ", " ", " ", " "} },
+};
+
+void SetCurrentCursorPos(int x, int y);
+COORD GetCurrentCursorPos();
+void RemoveCursor();
+
+void showMap();
+int showObject(char obsInfo[7][4][3]);
+int removeObject(char obsInfo[7][4][3]);
+void showCharacter(char charInfo[3][5]);
+void removeCharacter(char charInfo[3][5]);
+int updateGameBoard(int curPosX, int curPosY, int n);
+void updatePcBoard(int curPosX, int curPosY, int n);
+int moveAllToLeft();
+int touchCheck();
+int gameOver();
+int showResult();
+void ProcessKeyInput();
+void pcJump();
+void pcSlide();
+void pcAttack();
+
+#define LEFT 75
+#define RIGHT 77
+#define UP 72
+#define DOWN 80
+#define ENTER 13
+
+#define JUMP 1
+#define SLIDE 2
+#define HIGHJUMP 3
+#define ATTACK 4
+
+int gameBoardInfo[20][100];
+int pcBoardInfo[20][5];
+
+int char_x = 3, char_y = 17;//캐릭터생성위치
+int char_size_x = 5, char_size_y = 3;//캐릭터 크기
+int obs_x = 92, obs_y = 13;//장애물생성위치
+int obs_size_x = 4, obs_size_y = 7;//장애물 크기
+int obs_n = 1;//장애물 번호
+int floor_y = 20;//바닥위치
+int cheat = 0; //무적 1:on, 0:off
+int HEALTH = 4;
+int CURRENT_STAGE = 1;
+int TOTAL_SCORE = 0;
+int KILLED_ZOMBIE = 0;
+int pc_state = 0; //pc 상태
+int pre_pc_state = 0; //pc 이전 상태
+int FRAME = 0;
+int slidingEnabled = FALSE;
+
+int main() {
+	
+	srand((unsigned int)time(NULL));
+	system("mode con:cols=100 lines=25"); //콘솔창 크기
+	//y=20위치에 바닥 깔기
+	showMap();
+	
+	RemoveCursor();
+
+	//(char_x, char_y)에 캐릭터 출력 (showCharacter)
+	SetCurrentCursorPos(char_x, char_y);
+	showCharacter(pcModel[0]);
+
+	int t = 0;
+	while (1) {
+		if (moveAllToLeft() == FALSE)
+			break;
+		int obs_id = rand() % 3;
+
+		SetCurrentCursorPos(90, 1);
+		printf("hp : %2d", HEALTH);
+		Sleep(20);
+
+		t += 1;
+		if (t % 30 == 0) {
+			SetCurrentCursorPos(obs_x, obs_y);
+			showObject(obsModel[obs_id]);
+			//Sleep(10);
+		}
+	}
+	
+
+	/*
+	for (int i = 0; i < 20; i++) {
+		for (int j = 0; j < 100; j++) {
+			SetCurrentCursorPos(j, i);
+			if(gameBoardInfo[i][j] != 0)
+				printf("%d", gameBoardInfo[i][j]);
+		}
+	}
+	*/
+	
+
+	//Sleep(1000);
+	//drawAll();
+
+
+	/*
+	int t = 10;
+	while (moveAllToLeft()) {
+		Sleep(10);
+		
+		for (int i = 0; i < 20; i++) {
+			for (int j = 0; j < 100; j++) {
+				SetCurrentCursorPos(j, i);
+				if (gameBoardInfo[i][j] != 0)
+					printf("%d", gameBoardInfo[i][j]);
+			}
+		}
+		
+		t += 10;
+		if (t == 500) {
+			SetCurrentCursorPos(obs_x, obs_y);
+			showObject(obsModel[0]);
+			Sleep(10);
+		}
+	}
+	*/
+	
+
+	/*
+	for (int k = 100-8; k > 9; k-=2) {
+		SetCurrentCursorPos(k, 14);
+		showObject(obsModel[1]);
+		Sleep(100);
+		//removeObject(obsModel[1]);
+		for (int i = 0; i < 20; i++) {
+			for (int j = 0; j < 100; j++) {
+				SetCurrentCursorPos(j, i);
+				printf("%d", gameBoardInfo[i][j]);
+			}
+		}
+	}
+	*/
+
+	getchar();
+	return 0;
+}
+
+void SetCurrentCursorPos(int x, int y) {
+	COORD curPos = { x, y };
+
+	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), curPos);
+}
+
+COORD GetCurrentCursorPos() {
+	COORD curPoint;
+	CONSOLE_SCREEN_BUFFER_INFO curInfo;
+
+	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &curInfo);
+	curPoint.X = curInfo.dwCursorPosition.X;
+	curPoint.Y = curInfo.dwCursorPosition.Y;
+
+	return curPoint;
+}
+
+void RemoveCursor() {
+	CONSOLE_CURSOR_INFO curInfo;
+	GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &curInfo);
+	curInfo.bVisible = 0;
+	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &curInfo);
+}
+
+void showMap() {
+	SetCurrentCursorPos(0, floor_y);
+	for (int i = 0; i < 100; i++)
+		printf("-");
+}
+
+int showObject(char obsInfo[7][4][3]) {
+	COORD curPos = GetCurrentCursorPos();
+	int obsdata = atoi(obsInfo[0][0]);
+	updateGameBoard(curPos.X, curPos.Y, obsdata);
+	for (int y = 1; y < obs_size_y; y++) {
+		for (int x = 0; x < obs_size_x; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+			if (strcmp(obsInfo[y][x], " ") != 0) {
+				printf("%s", obsInfo[y][x]);
+				updateGameBoard(curPos.X+(x*2), curPos.Y+y, 1);
+			}
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+	return 1;
+}
+
+int removeObject(char obsInfo[7][4][3]) {
+	COORD curPos = GetCurrentCursorPos();
+	updateGameBoard(curPos.X, curPos.Y, 0);
+	for (int y = 1; y < obs_size_y; y++) {
+		for (int x = 0; x < obs_size_x; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+			if (strcmp(obsInfo[y][x], " ") != 0) {
+				printf("  ");
+				updateGameBoard(curPos.X + x*2, curPos.Y + y, 0);
+				updateGameBoard(curPos.X + x*2 + 1, curPos.Y + y, 0);
+			}
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+	return 1;
+}
+
+void showCharacter(char charInfo[3][5]) {
+	COORD curPos = GetCurrentCursorPos();
+	for (int y = 0; y < char_size_y; y++) {
+		for (int x = 0; x < char_size_x; x++) {
+			SetCurrentCursorPos(curPos.X + x, curPos.Y + y);
+			if (charInfo[y][x] != ' ') {
+				printf("%c", charInfo[y][x]);
+				updatePcBoard(curPos.X+x-char_x, curPos.Y+y, 1);
+			}
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+
+void removeCharacter(char charInfo[3][5]) {
+	COORD curPos = GetCurrentCursorPos();
+	
+	for (int y = 0; y < char_size_y; y++) {
+		for (int x = 0; x < char_size_x; x++) {
+			SetCurrentCursorPos(curPos.X + x, curPos.Y+y);
+			if (charInfo[y][x] != ' ') {
+				printf(" ");
+				updatePcBoard(curPos.X+x-char_x, curPos.Y+y, 0);
+			}
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+
+int updateGameBoard(int curPosX, int curPosY, int n) {
+	gameBoardInfo[curPosY][curPosX] = n;
+	if (n == 1) //n이 multibyte_character이면 //다른 오브젝트/캐릭터/아이템의 multibyte_character 여부의 따라 추가
+		gameBoardInfo[curPosY][curPosX+1] = n;
+	return 1;
+}
+
+void updatePcBoard(int curPosX, int curPosY, int n) {
+	pcBoardInfo[curPosY][curPosX] = n;
+}
+
+//PC, 인터페이스를 제외하고 obj,좀비,아이템 등을 모두 왼쪽으로 한칸씩 당기는 함수
+int moveAllToLeft() {
+	if (pc_state == 0) {
+		SetCurrentCursorPos(char_x, char_y);
+		removeCharacter(pcModel[pre_pc_state]);
+		SetCurrentCursorPos(char_x, char_y);
+		showCharacter(pcModel[pc_state]);
+		ProcessKeyInput();
+	}
+	else if (pc_state == JUMP || pc_state == HIGHJUMP) {
+		pcJump();
+	}
+	else if (pc_state == SLIDE) {
+		pcSlide();
+		ProcessKeyInput();
+	}
+	else if (pc_state == ATTACK) {
+		pcAttack();
+	}
+
+	int y = obs_y;
+	int obs_id;
+	//obj, char, item이 왼쪽 끝에 닿으면 삭제
+	if (gameBoardInfo[y][0] != 0) {
+		switch (gameBoardInfo[y][0] / 10) {
+		case 1:
+			obs_id = gameBoardInfo[y][0] % 10;
+			SetCurrentCursorPos(0, y);
+			removeObject(obsModel[obs_id]);
+		}
+	}
+	//
+	for (int x = 1; x < 100; x++) {
+		//gameBoardInfo[y][x]가 obj/좀비/item이라면
+		if (gameBoardInfo[y][x] != 0) {//장애물 충돌 시 어떻게 되는지에 따라 바뀜
+			//왼쪽으로 한칸 움직여 출력
+			switch (gameBoardInfo[y][x] / 10) {
+			case 1:
+				obs_id = gameBoardInfo[y][x] % 10;
+				SetCurrentCursorPos(x, y);
+				removeObject(obsModel[obs_id]);
+				SetCurrentCursorPos(x - 1, y);
+				showObject(obsModel[obs_id]);
+			}
+			//PC가 장애물과 닿았다면 (switch로 변경 가능)
+			if (touchCheck() == 1) {
+				//if 일정시간 무적이 켜있으면 return     //임시
+				//if 무적이 아니라면
+				if (cheat != 1) {
+					HEALTH--; //임시
+					if (gameOver() == TRUE) {
+						return showResult();
+					}
+					//충돌 시 배경 색 변경  //임시
+					system("color 47");
+					Sleep(50);
+					system("color 07");
+					//일정시간 무적 켜기 //임시
+					cheat = 1;
+				}
+			}
+			//Pc가 장애물을 빠져나왔고, 무적이 켜져있으면 무적 끄기 //임시
+			if (touchCheck() == 0 && cheat == 1)
+				cheat = 0;
+		}
+	}
+
+	/* //gameBoardInfo 테스트용
+	for (int y = 0; y < 20; y++) {
+		for (int x = 0; x < 100; x++) {
+			SetCurrentCursorPos(x, y);
+			printf("%d", gameBoardInfo[y][x]);
+		}
+	}
+	*/
+
+	return TRUE;
+}
+
+int touchCheck() {
+	for (int y = 0; y < 20; y++) {
+		for (int x = 0; x < char_size_x; x++) {
+			if (pcBoardInfo[y][x] == 1 && gameBoardInfo[y][char_x + x] != 0)
+				return gameBoardInfo[y][char_x + x];
+		}
+	}
+
+	return 0;
+}
+
+int gameOver()
+{
+	if (HEALTH <= 0) return TRUE;
+	else return FALSE;
+}
+
+int showResult() {
+	system("cls");
+
+	SetCurrentCursorPos(40, 2);
+	if (gameOver()) printf("~ Game Over ~ ");
+	else printf("~ Game Clear ~ ");
+
+
+	SetCurrentCursorPos(40, 4);
+	printf("SCORE : %d", TOTAL_SCORE);
+
+	SetCurrentCursorPos(40, 5);
+	printf("HP : %d", HEALTH);
+
+	SetCurrentCursorPos(40, 6);
+	printf("Killed Zombie : %d", KILLED_ZOMBIE);
+
+	Sleep(2000);
+	return FALSE;
+}
+
+void ProcessKeyInput() {
+if (_kbhit() != 0) {
+		int key = _getch();
+		switch (key) {
+		case LEFT:
+			pc_state = HIGHJUMP;
+			slidingEnabled = FALSE;
+			break;
+		case RIGHT:
+			pc_state = ATTACK;
+			slidingEnabled = FALSE;
+			break;
+		case UP:
+			pc_state = JUMP;
+			slidingEnabled = FALSE;
+			break;
+		case DOWN:
+			pc_state = SLIDE;
+			if(slidingEnabled == FALSE) slidingEnabled = TRUE;
+			else slidingEnabled = FALSE;
+			break;
+		case ENTER:
+			break;
+		}
+	}
+}
+
+
+void pcJump() {
+	int height = 6;
+	if (pc_state == HIGHJUMP) {
+		height += 4;
+	}
+	if (FRAME == 0) {
+		SetCurrentCursorPos(char_x, char_y);
+		removeCharacter(pcModel[pre_pc_state]);
+		SetCurrentCursorPos(char_x, char_y);
+		showCharacter(pcModel[pc_state]);
+		pre_pc_state = pc_state;
+		FRAME++;
+	}
+	else if (FRAME >= 1 && FRAME <= height) {
+		SetCurrentCursorPos(char_x, char_y - (FRAME - 1));
+		removeCharacter(pcModel[pc_state]);
+		SetCurrentCursorPos(char_x, char_y - FRAME);
+		showCharacter(pcModel[pc_state]);
+		FRAME++;
+	}
+	else if (FRAME >= height+1 && FRAME <= height*2) {
+		SetCurrentCursorPos(char_x, char_y - ((FRAME - 1) - ((FRAME - 1) - height) * 2));
+		removeCharacter(pcModel[pc_state]);
+		SetCurrentCursorPos(char_x, char_y - (FRAME - (FRAME - height) * 2));
+		showCharacter(pcModel[pc_state]);
+		FRAME++;
+	}
+	if (FRAME == height*2+1) {
+		FRAME = 0;
+		pc_state = 0;
+	}
+}
+
+void pcSlide() {
+	if (slidingEnabled == TRUE) {
+		SetCurrentCursorPos(char_x, char_y);
+		removeCharacter(pcModel[pre_pc_state]);
+		SetCurrentCursorPos(char_x, char_y);
+		showCharacter(pcModel[pc_state]);
+		pre_pc_state = pc_state;
+	}
+	else {
+		pc_state = 0;
+		SetCurrentCursorPos(char_x, char_y);
+		removeCharacter(pcModel[pre_pc_state]);
+		SetCurrentCursorPos(char_x, char_y);
+		showCharacter(pcModel[pc_state]);
+		pre_pc_state = pc_state;
+	}
+}
+
+void pcAttack() {
+	int length = 4;
+	if (FRAME == 0) {
+		SetCurrentCursorPos(char_x, char_y);
+		removeCharacter(pcModel[pre_pc_state]);
+		FRAME++;
+	}
+	else if (FRAME >= 1 && FRAME <= length) {
+		SetCurrentCursorPos(char_x, char_y);
+		showCharacter(pcModel[pc_state]);
+		FRAME++;
+	}
+	else {
+		pc_state = 0;
+		FRAME = 0;
+	}
+}
