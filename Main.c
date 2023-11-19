@@ -144,6 +144,7 @@ int pc_state = 0; //pc 상태
 int pre_pc_state = 0; //pc 이전 상태
 int FRAME = 0; //Jump와 HighJump를 구현할 때 사용
 int slidingEnabled = FALSE; //슬라이딩 상태 True/False로 구별
+int isSlide = FALSE; //슬라이딩중인지 아닌지 확인
 
 int main() {
 	
@@ -410,32 +411,33 @@ int showResult() {
 }
 
 void ProcessKeyInput() {
-if (_kbhit() != 0) {
-		int key = _getch();
-		//입력한 키에 따라 pc의 상태를 바꿔줌
-		switch (key) {
-		case LEFT:
-			pc_state = HIGHJUMP;
-			slidingEnabled = FALSE;
-			break;
-		case RIGHT:
-			pc_state = ATTACK;
-			slidingEnabled = FALSE;
-			break;
-		case UP:
-			pc_state = JUMP;
-			slidingEnabled = FALSE;
-			break;
-		case DOWN:
-			pc_state = SLIDE;
-			if(slidingEnabled == FALSE) slidingEnabled = TRUE;
-			else slidingEnabled = FALSE;
-			break;
-		case ENTER:
-			break;
-		}
+
+	if (GetAsyncKeyState(VK_LEFT) & 0X8000)
+	{
+		pc_state = HIGHJUMP;
+		slidingEnabled = FALSE;
+	}
+	if (GetAsyncKeyState(VK_RIGHT) & 0X8000)
+	{
+		pc_state = ATTACK;
+		slidingEnabled = FALSE;
+	}
+	if (GetAsyncKeyState(VK_DOWN) & 0X8000)
+	{
+		pc_state = SLIDE;
+		isSlide = TRUE;
+	}
+	if (!(GetAsyncKeyState(VK_DOWN) & 0X8000))
+	{
+		isSlide = FALSE;
+	}
+	if (GetAsyncKeyState(VK_UP) & 0X8000)
+	{
+		pc_state = JUMP;
+		slidingEnabled = FALSE;
 	}
 }
+
 
 void pcJump() {
 	int height = 6; //그냥 Jump일때와 HighJump일때의 높이 값을 다르게 하는 변수
@@ -471,14 +473,16 @@ void pcJump() {
 }
 
 void pcSlide() {
-	if (slidingEnabled == TRUE) {
+	if (isSlide == TRUE)
+	{
 		SetCurrentCursorPos(char_x, char_y);
 		removeCharacter(pcModel[pre_pc_state]);
 		SetCurrentCursorPos(char_x, char_y);
 		showCharacter(pcModel[pc_state]);
 		pre_pc_state = pc_state;
 	}
-	else {
+	else
+	{
 		pc_state = 0;
 		SetCurrentCursorPos(char_x, char_y);
 		removeCharacter(pcModel[pre_pc_state]);
